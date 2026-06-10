@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Шахматы Онлайн | Chess Online</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    /*
+    ================================================================
+    BEM (Block Element Modifier) — методология именования CSS
+    
+    Блоки:    .chess-board, .player-info, .move-list, .game-status,
+              .promotion-modal, .game-over-modal, .header, .btn
+    Элементы: .chess-board__square, .chess-board__piece,
+              .move-list__row, .move-list__move, .player-info__name
+    Модификаторы: .chess-board__square--light/dark/selected/valid-move,
+                  .player-info--active, .btn--primary/secondary
+    ================================================================
+    */
+ 
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+ 
+    :root {
+      --color-bg:           #1a1a2e;
+      --color-surface:      #16213e;
+      --color-surface-2:    #0f3460;
+      --color-board-light:  #f0d9b5;
+      --color-board-dark:   #b58863;
+      --color-selected:     #6fc96f;
+      --color-last-light:   #cdd16f;
+      --color-last-dark:    #aaa23a;
+      --color-check:        rgba(240, 40, 40, 0.65);
+      --color-accent:       #c9a227;
+      --color-accent-2:     #e8c84b;
+      --color-text:         #e8e8e8;
+      --color-text-dim:     #8888a0;
+      --color-white-piece:  #fff5e6;
+      --color-black-piece:  #1a0e00;
+      --font-display:       'Cinzel', serif;
+      --font-body:          'Inter', sans-serif;
+      --board-size: min(560px, 94vw);
+      --sq: calc(var(--board-size) / 8);
+    }
+ 
+    body {
+      font-family: var(--font-body);
+      background: var(--color-bg);
+      color: var(--color-text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+ 
+    /* ===== HEADER block ===== */
+    .header {
+      width: 100%;
+      padding: 14px 28px;
+      background: var(--color-surface);
+      border-bottom: 1px solid rgba(201,162,39,.3);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header__logo { display: flex; align-items: center; gap: 10px; }
+    .header__icon { font-size: 1.8rem; }
+    .header__title {
+      font-family: var(--font-display);
+      font-size: 1.4rem;
+      color: var(--color-accent);
+      letter-spacing: .06em;
+    }
+    .header__subtitle {
+      font-size: .7rem;
+      color: var(--color-text-dim);
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+    .header__controls { display: flex; gap: 10px; }
+ 
+    /* ===== BTN block ===== */
+    .btn {
+      font-family: var(--font-body);
+      font-size: .82rem;
+      font-weight: 500;
+      padding: 7px 18px;
+      border-radius: 5px;
+      border: none;
+      cursor: pointer;
+      transition: all .15s ease;
+      letter-spacing: .03em;
+    }
+    .btn--primary { background: var(--color-accent); color: #1a1a2e; }
+    .btn--primary:hover { background: var(--color-accent-2); transform: translateY(-1px); }
+    .btn--secondary {
+      background: transparent;
+      color: var(--color-text-dim);
+      border: 1px solid rgba(255,255,255,.15);
+    }
+    .btn--secondary:hover { color: var(--color-text); border-color: rgba(255,255,255,.35); }
+ 
+    /* ===== GAME LAYOUT ===== */
+    .game-layout {
+      display: flex;
+      gap: 20px;
+      padding: 20px;
+      align-items: flex-start;
+      width: 100%;
+      max-width: 1080px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+ 
+    /* ===== BOARD-WRAPPER block ===== */
+    .board-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+ 
+    /* ===== PLAYER-INFO block ===== */
+    .player-info {
+      width: var(--board-size);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 14px;
+      background: var(--color-surface);
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,.07);
+      transition: border-color .3s, box-shadow .3s;
+    }
+    /* Modifier: active player */
+    .player-info--active {
+      border-color: var(--color-accent);
+      box-shadow: 0 0 14px rgba(201,162,39,.2);
+    }
+    .player-info__left { display: flex; align-items: center; gap: 8px; }
+    .player-info__dot {
+      width: 13px; height: 13px;
+      border-radius: 50%;
+    }
+    .player-info__dot--white { background: #f5f5f5; border: 2px solid rgba(255,255,255,.4); }
+    .player-info__dot--black { background: #111; border: 2px solid rgba(255,255,255,.25); }
+    .player-info__name { font-family: var(--font-display); font-size: .95rem; font-weight: 600; }
+    .player-info__captures { font-size: .95rem; line-height: 1; min-height: 20px; }
+    .player-info__timer {
+      font-family: 'Courier New', monospace;
+      font-size: 1.1rem;
+      color: var(--color-accent);
+      font-weight: 700;
+      min-width: 52px;
+      text-align: right;
+    }
+    .player-info__timer--danger { color: #ff6b6b !important; }
+ 
+    /* ===== CHESS-BOARD block ===== */
+    .chess-board {
+      display: grid;
+      grid-template-columns: repeat(8, var(--sq));
+      grid-template-rows: repeat(8, var(--sq));
+      border: 3px solid var(--color-accent);
+      border-radius: 2px;
+      box-shadow: 0 12px 48px rgba(0,0,0,.55), 0 0 0 1px rgba(201,162,39,.2);
+    }
+ 
+    /* ===== CHESS-BOARD__SQUARE element ===== */
+    .chess-board__square {
+      width: var(--sq); height: var(--sq);
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+      cursor: pointer;
+      user-select: none;
+    }
+    /* Modifiers */
+    .chess-board__square--light  { background: var(--color-board-light); }
+    .chess-board__square--dark   { background: var(--color-board-dark);  }
+    .chess-board__square--selected   { background: var(--color-selected) !important; }
+    .chess-board__square--last-light { background: var(--color-last-light) !important; }
+    .chess-board__square--last-dark  { background: var(--color-last-dark) !important; }
+    .chess-board__square--check      { background: var(--color-check) !important; }
+ 
+    /* Valid move dot */
+    .chess-board__square--valid-move::after {
+      content: '';
+      position: absolute;
+      width: 32%; height: 32%;
+      border-radius: 50%;
+      background: rgba(0,0,0,.22);
+      pointer-events: none;
+    }
+    /* Valid capture ring */
+    .chess-board__square--valid-capture::after {
+      content: '';
+      position: absolute;
+      width: 88%; height: 88%;
+      border-radius: 50%;
+      border: 5px solid rgba(0,0,0,.22);
+      background: transparent;
+      pointer-events: none;
+    }
+ 
+    /* ===== CHESS-BOARD__PIECE element ===== */
+    .chess-board__piece {
+      font-size: calc(var(--sq) * .76);
+      line-height: 1;
+      position: relative;
+      z-index: 2;
+      transition: transform .1s ease;
+      pointer-events: none;
+    }
+    .chess-board__piece--white {
+      color: var(--color-white-piece);
+      filter: drop-shadow(0 1px 3px rgba(0,0,0,.75));
+    }
+    .chess-board__piece--black {
+      color: var(--color-black-piece);
+      filter: drop-shadow(0 1px 2px rgba(255,255,255,.15));
+    }
+    .chess-board__square:hover .chess-board__piece { transform: scale(1.07) translateY(-2px); }
+ 
+    /* ===== CHESS-BOARD coordinates ===== */
+    .chess-board__coord {
+      position: absolute; font-size: .58rem; font-weight: 600;
+      opacity: .55; line-height: 1; pointer-events: none;
+    }
+    .chess-board__coord--rank { top: 2px; left: 3px; }
+    .chess-board__coord--file { bottom: 2px; right: 3px; }
+    .chess-board__square--light .chess-board__coord { color: var(--color-board-dark); }
+    .chess-board__square--dark  .chess-board__coord { color: var(--color-board-light); }
+ 
+    /* ===== SIDE-PANEL block ===== */
+    .side-panel {
+      width: 255px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      flex-shrink: 0;
+    }
+ 
+    /* ===== GAME-STATUS block ===== */
+    .game-status {
+      background: var(--color-surface);
+      border-radius: 10px;
+      padding: 14px;
+      border: 1px solid rgba(255,255,255,.07);
+      text-align: center;
+    }
+    .game-status__label {
+      font-size: .68rem;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      color: var(--color-text-dim);
+      margin-bottom: 6px;
+    }
+    .game-status__message {
+      font-family: var(--font-display);
+      font-size: 1.05rem;
+      color: var(--color-accent);
+      font-weight: 600;
+    }
+    .game-status__message--check {
+      color: #ff6b6b;
+      animation: pulse .75s ease infinite alternate;
+    }
+    @keyframes pulse { from { opacity:.65; } to { opacity: 1; } }
+ 
+    /* ===== MOVE-LIST block ===== */
+    .move-list {
+      background: var(--color-surface);
+      border-radius: 10px;
+      padding: 14px;
+      border: 1px solid rgba(255,255,255,.07);
+      flex: 1;
+    }
+    .move-list__title {
+      font-family: var(--font-display);
+      font-size: .8rem;
+      color: var(--color-accent);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+    }
+    .move-list__container {
+      max-height: 320px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(201,162,39,.3) transparent;
+    }
+    .move-list__container::-webkit-scrollbar { width: 4px; }
+    .move-list__container::-webkit-scrollbar-thumb { background: rgba(201,162,39,.3); border-radius: 2px; }
+    .move-list__row {
+      display: grid;
+      grid-template-columns: 26px 1fr 1fr;
+      gap: 2px;
+      padding: 3px 0;
+      font-size: .82rem;
+    }
+    .move-list__row:nth-child(even) { background: rgba(255,255,255,.03); border-radius: 3px; }
+    .move-list__number { color: var(--color-text-dim); font-size: .72rem; padding-left: 2px; }
+    .move-list__move { font-family: 'Courier New', monospace; color: var(--color-text); padding: 1px 4px; border-radius: 3px; }
+    .move-list__move--last { background: rgba(201,162,39,.2); color: var(--color-accent); }
+    .move-list__empty { color: var(--color-text-dim); font-size: .78rem; text-align: center; padding: 18px 0; }
+ 
+    /* ===== PROMOTION-MODAL block ===== */
+    .promotion-modal {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.72); z-index: 100;
+      align-items: center; justify-content: center;
+    }
+    .promotion-modal--visible { display: flex; }
+    .promotion-modal__dialog {
+      background: var(--color-surface);
+      border: 2px solid var(--color-accent);
+      border-radius: 14px;
+      padding: 28px 32px;
+      text-align: center;
+      box-shadow: 0 24px 72px rgba(0,0,0,.65);
+    }
+    .promotion-modal__title {
+      font-family: var(--font-display);
+      font-size: 1rem;
+      color: var(--color-accent);
+      margin-bottom: 20px;
+    }
+    .promotion-modal__pieces { display: flex; gap: 14px; justify-content: center; }
+    .promotion-modal__btn {
+      width: 68px; height: 68px;
+      font-size: 2.8rem; line-height: 1;
+      background: rgba(255,255,255,.05);
+      border: 2px solid transparent;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all .15s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .promotion-modal__btn:hover { border-color: var(--color-accent); background: rgba(201,162,39,.15); transform: translateY(-3px); }
+ 
+    /* ===== GAME-OVER-MODAL block ===== */
+    .game-over-modal {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.75); z-index: 200;
+      align-items: center; justify-content: center;
+    }
+    .game-over-modal--visible { display: flex; }
+    .game-over-modal__dialog {
+      background: var(--color-surface);
+      border: 2px solid var(--color-accent);
+      border-radius: 18px;
+      padding: 44px 52px;
+      text-align: center;
+      box-shadow: 0 28px 80px rgba(0,0,0,.7);
+      max-width: 380px;
+      animation: fadeUp .35s ease;
+    }
+    @keyframes fadeUp { from { opacity:0; transform: translateY(20px); } to { opacity:1; transform:none; } }
+    .game-over-modal__icon { font-size: 3.8rem; margin-bottom: 14px; }
+    .game-over-modal__title { font-family: var(--font-display); font-size: 1.9rem; color: var(--color-accent); margin-bottom: 8px; }
+    .game-over-modal__subtitle { color: var(--color-text-dim); font-size: .95rem; margin-bottom: 30px; }
+ 
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 860px) {
+      .game-layout { flex-direction: column; align-items: center; padding: 14px; }
+      .side-panel { width: var(--board-size); flex-direction: row; flex-wrap: wrap; }
+      .move-list { flex: 1; min-width: 180px; }
+      .game-status { flex: 0 0 auto; }
+      .move-list__container { max-height: 180px; }
+    }
+  </style>
+</head>
+<body>
+ 
+<!-- HEADER block -->
+<header class="header">
+  <div class="header__logo">
+    <span class="header__icon">♟</span>
+    <div>
+      <div class="header__title">Шахматы</div>
+      <div class="header__subtitle">Chess Online · BEM + OOP + SOLID</div>
+    </div>
+  </div>
+  <div class="header__controls">
+    <button class="btn btn--secondary" id="btn-flip">⇅ Перевернуть</button>
+    <button class="btn btn--primary"    id="btn-new-game">Новая игра</button>
+  </div>
+</header>
+ 
+<main class="game-layout">
+ 
+  <!-- BOARD-WRAPPER block -->
+  <div class="board-wrapper">
+ 
+    <!-- PLAYER-INFO block (black) -->
+    <div class="player-info" id="player-info-black">
+      <div class="player-info__left">
+        <div class="player-info__dot player-info__dot--black"></div>
+        <span class="player-info__name">Чёрные</span>
+      </div>
+      <div class="player-info__captures" id="captures-black"></div>
+      <div class="player-info__timer" id="timer-black">10:00</div>
+    </div>
+ 
+    <!-- CHESS-BOARD block -->
+    <div class="chess-board" id="chess-board"></div>
+ 
+    <!-- PLAYER-INFO block (white) -->
+    <div class="player-info player-info--active" id="player-info-white">
+      <div class="player-info__left">
+        <div class="player-info__dot player-info__dot--white"></div>
+        <span class="player-info__name">Белые</span>
+      </div>
+      <div class="player-info__captures" id="captures-white"></div>
+      <div class="player-info__timer" id="timer-white">10:00</div>
+    </div>
+ 
+  </div><!-- /board-wrapper -->
+ 
+  <!-- SIDE-PANEL block -->
+  <div class="side-panel">
+ 
+    <!-- GAME-STATUS block -->
+    <div class="game-status">
+      <div class="game-status__label">Текущий ход</div>
+      <div class="game-status__message" id="status-message">Белые</div>
+    </div>
+ 
+    <!-- MOVE-LIST block -->
+    <div class="move-list">
+      <div class="move-list__title">История ходов</div>
+      <div class="move-list__container" id="move-list-container">
+        <div class="move-list__empty">Игра началась</div>
+      </div>
+    </div>
+ 
+  </div><!-- /side-panel -->
+ 
+</main>
+ 
+<!-- PROMOTION-MODAL block -->
+<div class="promotion-modal" id="promotion-modal">
+  <div class="promotion-modal__dialog">
+    <div class="promotion-modal__title">Превращение пешки — выберите фигуру</div>
+    <div class="promotion-modal__pieces" id="promotion-pieces"></div>
+  </div>
+</div>
+ 
+<!-- GAME-OVER-MODAL block -->
+<div class="game-over-modal" id="game-over-modal">
+  <div class="game-over-modal__dialog">
+    <div class="game-over-modal__icon"     id="go-icon">♔</div>
+    <div class="game-over-modal__title"    id="go-title">Шах и мат!</div>
+    <div class="game-over-modal__subtitle" id="go-subtitle">Победили белые</div>
+    <button class="btn btn--primary" id="btn-play-again">Играть снова</button>
+  </div>
+</div>
+ 
+<script>
+/*
+========================================================================
+ ПРИНЦИПЫ ООП (OOP) и SOLID — задокументированы прямо в коде.
+ 
+ ООП:
+   Абстракция    — класс Piece абстрагирует понятие «шахматная фигура»;
+                   пользователь класса не знает деталей вычисления ходов.
+   Инкапсуляция  — каждый класс хранит своё состояние и скрывает
+                   вспомогательные методы (префикс _method).
+   Наследование  — Pawn / Rook / Knight / Bishop / Queen / King
+                   наследуют от Piece и переиспользуют его методы.
+   Полиморфизм   — getMoves() ведёт себя по-разному для каждой фигуры;
+                   вызывающий код работает с любой фигурой единообразно.
+ 
+ SOLID:
+   S — Single Responsibility:
+         Piece (и подклассы) — только логика ходов фигуры.
+         Board               — только хранение и мутация клеток.
+         MoveValidator       — только проверка легальности ходов / шаха.
+         MoveHistory         — только алгебраическая запись партии.
+         GameRenderer        — только манипуляции с DOM.
+         Timer               — только таймер.
+         Game                — только оркестрация игрового процесса.
+   O — Open/Closed:
+         Piece открыт для расширения (добавьте новый класс-фигуру)
+         и закрыт для изменения (существующие классы не трогаем).
+   L — Liskov Substitution:
+         Любой наследник Piece можно использовать там, где ожидается Piece.
+   I — Interface Segregation:
+         GameRenderer не зависит от логики валидации.
+         MoveValidator не зависит от DOM/отрисовки.
+   D — Dependency Inversion:
+         Game принимает объекты-зависимости (Board, Renderer и пр.)
+         и обращается к ним через их общедоступные методы,
+         не привязываясь к конкретным деталям реализации.
+========================================================================
+*/
+ 
+'use strict';
+ 
+/* ──────────────────────────── CONSTANTS ──────────────────────────── */
+const COLORS = { WHITE: 'white', BLACK: 'black' };
+const TYPES  = { PAWN:'pawn', ROOK:'rook', KNIGHT:'knight', BISHOP:'bishop', QUEEN:'queen', KING:'king' };
+ 
+// Инкапсуляция константного маппинга Unicode-символов
+const SYMBOLS = {
+  white: { king:'♔', queen:'♕', rook:'♖', bishop:'♗', knight:'♘', pawn:'♙' },
+  black: { king:'♚', queen:'♛', rook:'♜', bishop:'♝', knight:'♞', pawn:'♟' }
+};
+ 
+const PIECE_VALUES = { pawn:1, knight:3, bishop:3, rook:5, queen:9, king:0 };
+const FILES = 'abcdefgh';
+const RANKS = '87654321';
+ 
+/* ═══════════════════════════════════════════════════════════════════
+   ООП: Абстракция + Инкапсуляция
+   Базовый класс Piece — «контракт» для всех шахматных фигур.
+   Метод getMoves() объявлен как абстрактный (throws).
+   ═══════════════════════════════════════════════════════════════════ */
+class Piece {
+  constructor(color, type) {
+    this.color    = color;   // 'white' | 'black'
+    this.type     = type;    // из TYPES
+    this.hasMoved = false;
+  }
+ 
+  // ООП: Полиморфизм — каждый подкласс переопределяет этот метод.
+  // Возвращает псевдо-легальные ходы: [[row, col, special?], ...]
+  getMoves(row, col, grid, enPassantTarget) {
+    throw new Error(`getMoves() не реализован для ${this.type}`);
+  }
+ 
+  // Получить Unicode-символ фигуры
+  getSymbol() { return SYMBOLS[this.color][this.type]; }
+ 
+  // Клонировать фигуру без мутации оригинала (паттерн Prototype)
+  clone() {
+    const p = Object.create(Object.getPrototypeOf(this));
+    p.color    = this.color;
+    p.type     = this.type;
+    p.hasMoved = this.hasMoved;
+    return p;
+  }
+ 
+  // Инкапсуляция: общие вспомогательные методы скрыты как protected
+  _inBounds(r, c) { return r >= 0 && r < 8 && c >= 0 && c < 8; }
+  _canLand(r, c, grid) {
+    return this._inBounds(r,c) && (grid[r][c] === null || grid[r][c].color !== this.color);
+  }
+}
+ 
+/* ═══════════════════════════════════════════════════════════════════
+   ООП: Наследование — каждая фигура наследует от Piece.
+   SOLID O: Новая фигура = новый подкласс, без изменения Piece.
+   SOLID L: Любой наследник Piece работает на месте Piece.
+   ═══════════════════════════════════════════════════════════════════ */
+ 
+class Pawn extends Piece {
+  constructor(color) { super(color, TYPES.PAWN); }
+ 
+  getMoves(row, col, grid, epTarget) {
+    const moves = [];
+    const dir   = this.color === COLORS.WHITE ? -1 : 1;  // белые идут вверх (−)
+    const start = this.color === COLORS.WHITE ? 6 : 1;
+ 
+    // Ход вперёд на 1
+    if (this._inBounds(row+dir, col) && grid[row+dir][col] === null) {
+      moves.push([row+dir, col]);
+      // Ход вперёд на 2 с начальной позиции
+      if (row === start && grid[row+2*dir][col] === null)
+        moves.push([row+2*dir, col]);
+    }
+    // Взятие по диагонали
+    for (const dc of [-1, 1]) {
+      const nr = row+dir, nc = col+dc;
+      if (this._inBounds(nr, nc)) {
+        if (grid[nr][nc] !== null && grid[nr][nc].color !== this.color)
+          moves.push([nr, nc]);
+        // Взятие на проходе
+        if (epTarget && epTarget[0] === nr && epTarget[1] === nc)
+          moves.push([nr, nc, 'enpassant']);
+      }
+    }
+    return moves;
+  }
+}
+ 
+class Rook extends Piece {
+  constructor(color) { super(color, TYPES.ROOK); }
+  getMoves(row, col, grid) {
+    return this._slide(row, col, grid, [[1,0],[-1,0],[0,1],[0,-1]]);
+  }
+  // Инкапсуляция: общий механизм скользящих ходов
+  _slide(row, col, grid, dirs) {
+    const moves = [];
+    for (const [dr,dc] of dirs) {
+      let r=row+dr, c=col+dc;
+      while (this._inBounds(r,c)) {
+        if (grid[r][c] === null) { moves.push([r,c]); }
+        else { if (grid[r][c].color !== this.color) moves.push([r,c]); break; }
+        r+=dr; c+=dc;
+      }
+    }
+    return moves;
+  }
+}
+ 
+class Knight extends Piece {
+  constructor(color) { super(color, TYPES.KNIGHT); }
+  getMoves(row, col, grid) {
+    const moves = [];
+    for (const [dr,dc] of [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]])
+      if (this._canLand(row+dr, col+dc, grid)) moves.push([row+dr, col+dc]);
+    return moves;
+  }
+}
+ 
+class Bishop extends Piece {
+  constructor(color) { super(color, TYPES.BISHOP); }
+  getMoves(row, col, grid) {
+    return this._slide(row, col, grid, [[1,1],[1,-1],[-1,1],[-1,-1]]);
+  }
+  _slide(row, col, grid, dirs) {
+    const moves = [];
+    for (const [dr,dc] of dirs) {
+      let r=row+dr, c=col+dc;
+      while (this._inBounds(r,c)) {
+        if (grid[r][c] === null) { moves.push([r,c]); }
+        else { if (grid[r][c].color !== this.color) moves.push([r,c]); break; }
+        r+=dr; c+=dc;
+      }
+    }
+    return moves;
+  }
+}
+ 
+class Queen extends Piece {
+  constructor(color) { super(color, TYPES.QUEEN); }
+  getMoves(row, col, grid) {
+    const dirs = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+    const moves = [];
+    for (const [dr,dc] of dirs) {
+      let r=row+dr, c=col+dc;
+      while (this._inBounds(r,c)) {
+        if (grid[r][c] === null) { moves.push([r,c]); }
+        else { if (grid[r][c].color !== this.color) moves.push([r,c]); break; }
+        r+=dr; c+=dc;
+      }
+    }
+    return moves;
+  }
+}
+ 
+class King extends Piece {
+  constructor(color) { super(color, TYPES.KING); }
+  getMoves(row, col, grid, _ep, skipCastle = false) {
+    const moves = [];
+    for (const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]])
+      if (this._canLand(row+dr, col+dc, grid)) moves.push([row+dr, col+dc]);
+ 
+    if (!skipCastle && !this.hasMoved) {
+      // Короткая рокировка (kingside)
+      const kr = grid[row][7];
+      if (kr && kr.type==='rook' && !kr.hasMoved && grid[row][5]===null && grid[row][6]===null)
+        moves.push([row, 6, 'castle-k']);
+      // Длинная рокировка (queenside)
+      const qr = grid[row][0];
+      if (qr && qr.type==='rook' && !qr.hasMoved &&
+          grid[row][1]===null && grid[row][2]===null && grid[row][3]===null)
+        moves.push([row, 2, 'castle-q']);
+    }
+    return moves;
+  }
+}
+ 
+/* ═══════════════════════════════════════════════════════════════════
+   SOLID S: Board отвечает только за состояние клеток доски.
+   Инкапсуляция: grid скрыт, доступ через методы.
+   ═══════════════════════════════════════════════════════════════════ */
+class Board {
+  constructor() {
+    this.grid          = Board._initGrid();
+    this.enPassantTarget = null;  // [row, col] — цель для взятия на проходе
+  }
+ 
+  static _initGrid() {
+    const g = Array.from({length:8}, () => Array(8).fill(null));
+    const back = [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook];
+    for (let c = 0; c < 8; c++) {
+      g[0][c] = new back[c](COLORS.BLACK);
+      g[1][c] = new Pawn(COLORS.BLACK);
+      g[6][c] = new Pawn(COLORS.WHITE);
+      g[7][c] = new back[c](COLORS.WHITE);
+    }
+    return g;
+  }
+ 
+  get(r, c)         { return this.grid[r]?.[c] ?? null; }
+  set(r, c, piece)  { this.grid[r][c] = piece; }
+ 
+  // Глубокое копирование — для симуляции ходов без мутации
+  clone() {
+    const b = new Board();
+    b.grid = this.grid.map(row => row.map(p => p ? p.clone() : null));
+    b.enPassantTarget = this.enPassantTarget ? [...this.enPassantTarget] : null;
+    return b;
+  }
+ 
+  // Найти позицию короля
+  findKing(color) {
+    for (let r=0;r<8;r++) for (let c=0;c<8;c++) {
+      const p=this.grid[r][c];
+      if (p && p.type==='king' && p.color===color) return [r,c];
+    }
+    return null;
+  }
+ 
+  // Применить ход; возвращает захваченную фигуру (или null)
+  applyMove(fr, fc, tr, tc, special=null) {
+    const piece    = this.grid[fr][fc];
+    let   captured = this.grid[tr][tc];
+ 
+    this.grid[fr][fc] = null;
+    this.grid[tr][tc] = piece;
+    if (piece) piece.hasMoved = true;
+ 
+    // Взятие на проходе: убрать пешку с соседней клетки
+    if (special === 'enpassant') {
+      captured = this.grid[fr][tc];
+      this.grid[fr][tc] = null;
+    }
+    // Рокировки: переставить ладью
+    if (special === 'castle-k') {
+      const rk = this.grid[tr][7]; this.grid[tr][7]=null; this.grid[tr][5]=rk; if(rk) rk.hasMoved=true;
+    }
+    if (special === 'castle-q') {
+      const rk = this.grid[tr][0]; this.grid[tr][0]=null; this.grid[tr][3]=rk; if(rk) rk.hasMoved=true;
+    }
+ 
+    // Обновить en-passant target
+    this.enPassantTarget = (piece?.type==='pawn' && Math.abs(tr-fr)===2)
+      ? [(fr+tr)/2, tc] : null;
+ 
+    return captured;
+  }
+}
+ 
+/* ═══════════════════════════════════════════════════════════════════
+   SOLID S: MoveValidator — только проверка ходов и шаха.
+   SOLID D: Принимает Board как зависимость, не создаёт его сам.
+   ═══════════════════════════════════════════════════════════════════ */
+class MoveValidator {
+ 
+  // Находится ли color под шахом
+  static isInCheck(board, color) {
+    const kp = board.findKing(color);
+    return kp ? MoveValidator._isAttacked(board, kp[0], kp[1], color) : false;
+  }
+ 
+  // Атакована ли клетка [r,c] противником color
+  static _isAttacked(board, r, c, color) {
+    const opp = color === COLORS.WHITE ? COLORS.BLACK : COLORS.WHITE;
+    for (let pr=0;pr<8;pr++) for (let pc=0;pc<8;pc++) {
+      const p = board.grid[pr][pc];
+      if (!p || p.color !== opp) continue;
+ 
+      let atk;
+      if (p.type === 'king')  atk = new King(opp).getMoves(pr,pc,board.grid,null,true);
+      else if (p.type==='pawn') {
+        const d = opp===COLORS.WHITE ? -1 : 1;
+        atk = [[pr+d,pc-1],[pr+d,pc+1]];
+      } else atk = p.getMoves(pr,pc,board.grid,null);
+ 
+      for (const m of atk) if (m[0]===r && m[1]===c) return true;
+    }
+    return false;
+  }
+ 
+  // Все легальные ходы для фигуры на [fr,fc] (после фильтрации шаха)
+  static getLegal(board, fr, fc) {
+    const piece = board.grid[fr][fc];
+    if (!piece) return [];
+ 
+    const pseudo = piece.getMoves(fr, fc, board.grid, board.enPassantTarget);
+    const legal  = [];
+ 
+    for (const mv of pseudo) {
+      const [tr, tc, special] = mv;
+ 
+      // Рокировка: проверить, что промежуточные клетки не под атакой
+      if (special === 'castle-k') {
+        if (MoveValidator.isInCheck(board, piece.color)) continue;
+        if (MoveValidator._isAttacked(board, fr, 5, piece.color)) continue;
+        if (MoveValidator._isAttacked(board, fr, 6, piece.color)) continue;
+      }
+      if (special === 'castle-q') {
+        if (MoveValidator.isInCheck(board, piece.color)) continue;
+        if (MoveValidator._isAttacked(board, fr, 3, piece.color)) continue;
+        if (MoveValidator._isAttacked(board, fr, 2, piece.color)) continue;
+      }
+ 
+      // Симулировать ход и убедиться, что собственный король не под шахом
+      const test = board.clone();
+      test.applyMove(fr, fc, tr, tc, special);
+      if (!MoveValidator.isInCheck(test, piece.color)) legal.push(mv);
+    }
+    return legal;
+  }
+ 
+  // Есть ли хоть один легальный ход у цвета
+  static hasAnyMove(board, color) {
+    for (let r=0;r<8;r++) for (let c=0;c<8;c++) {
+      const p = board.grid[r][c];
+      if (p && p.color===color && MoveValidator.getLegal(board,r,c).length>0) return true;
+    }
+    return false;
+  }
+}
+ 
+/* ═══════════════════════════════════════════════════════════════════
+   SOLID S: MoveHistory — только запись и форматирование истории ходов.
+   ═══════════════════════════════════════════════════════════════════ */
+class MoveHistory {
+  constructor() {
+    this.pairs    = [];   // [{num, w:'e4', b:'e5'}, ...]
+    this.flatList = [];   // [{notation, color}, ...]
+    this._pendingW = null;
+    this._moveNum  = 1;
+  }
+ 
+  record(piece, fr, fc, tr, tc, captured, special, inCheck, isMate) {
+    const n = this._toAN(piece, fr, fc, tr, tc, captured, special, inCheck, isMate);
+    this.flatList.push({ notation: n, color: piece.color });
+ 
+    if (piece.color === COLORS.WHITE) {
+      this._pendingW = n;
+    } else {
+      this.pairs.push({ num: this._moveNum++, w: this._pendingW, b: n });
+      this._pendingW = null;
+    }
+    return n;
+  }
+ 
+  finalize() {
+    if (this._pendingW) {
+      this.pairs.push({ num: this._moveNum, w: this._pendingW, b: '' });
+      this._pendingW = null;
+    }
+  }
+ 
+  lastIndex() { return this.flatList.length - 1; }
+ 
+  // Алгебраическая нотация (упрощённая, но корректная для большинства случаев)
+  _toAN(piece, fr, fc, tr, tc, captured, special, inCheck, isMate) {
+    const sfx = isMate ? '#' : inCheck ? '+' : '';
+    if (special==='castle-k') return 'O-O'+sfx;
+    if (special==='castle-q') return 'O-O-O'+sfx;
+ 
+    const sym = { pawn:'', rook:'R', knight:'N', bishop:'B', queen:'Q', king:'K' };
+    let n = sym[piece.type];
+    if (piece.type !== 'pawn') n += FILES[fc];
+    if (captured || special==='enpassant') {
+      if (piece.type==='pawn') n += FILES[fc];
+      n += 'x';
+    }
+    n += FILES[tc] + RANKS[tr];
+    if (special==='enpassant') n += ' e.p.';
+    return n + sfx;
+  }
+}
+ 
+/* ═══════════════════════════════════════════════════════════════════
+   SOLID S: GameRenderer — только DOM-манипуляции (рендеринг).
+   SOLID I: Не знает о MoveValidator или логике игры.
+   ═══════════════════════════════════════════════════════════════════ */
+class GameRenderer {
+  constructor(boardEl) {
+    this.boardEl = boardEl;
+    this.flipped = false;
+  }
+ 
+  renderBoard(board, selected, legalMoves, lastMove, checkColor) {
+    this.boardEl.innerHTML = '';
+    for (let dr=0; dr<8; dr++) {
+      for (let dc=0; dc<8; dc++) {
+        const r = this.flipped ? 7-dr : dr;
+        const c = this.flipped ? 7-dc : dc;
+        this.boardEl.appendChild(this._makeSquare(r, c, board, selected, legalMoves, lastMove, checkColor));
+      }
+    }
+  }
+ 
+  _makeSquare(r, c, board, selected, legalMoves, lastMove, checkColor) {
+    const el    = document.createElement('div');
+    const light = (r+c)%2 === 0;
+ 
+    // BEM: базовые классы
+    el.className = `chess-board__square chess-board__square--${light ? 'light' : 'dark'}`;
+    el.dataset.row = r; el.dataset.col = c;
+ 
+    // BEM модификаторы состояния
+    if (selected && selected[0]===r && selected[1]===c)
+      el.classList.add('chess-board__square--selected');
+ 
+    if (lastMove && ((lastMove.fr===r && lastMove.fc===c)||(lastMove.tr===r && lastMove.tc===c)))
+      el.classList.add(`chess-board__square--last-${light?'light':'dark'}`);
+ 
+    if (legalMoves) {
+      for (const m of legalMoves) {
+        if (m[0]===r && m[1]===c) {
+          el.classList.add(board.get(r,c)
+            ? 'chess-board__square--valid-capture'
+            : 'chess-board__square--valid-move');
+          break;
+        }
+      }
+    }
+ 
+    const piece = board.get(r,c);
+    if (piece?.type==='king' && piece.color===checkColor)
+      el.classList.add('chess-board__square--check');
+ 
+    // Координаты
+    if (c === (this.flipped ? 7 : 0)) {
+      const s = document.createElement('span');
+      s.className = 'chess-board__coord chess-board__coord--rank';
+      s.textContent = 8-r; el.appendChild(s);
+    }
+    if (r === (this.flipped ? 0 : 7)) {
+      const s = document.createElement('span');
+      s.className = 'chess-board__coord chess-board__coord--file';
+      s.textContent = FILES[c]; el.appendChild(s);
+    }
+ 
+    // Фигура
+    if (piece) {
+      const p = document.createElement('span');
+      p.className = `chess-board__piece chess-board__piece--${piece.color}`;
+      p.textContent = piece.getSymbol();
+      el.appendChild(p);
+    }
+    return el;
+  }
+ 
+  renderHistory(history) {
+    const el = document.getElementById('move-list-container');
+    if (!history.pairs.length && !history._pendingW) {
+      el.innerHTML = '<div class="move-list__empty">Игра началась</div>';
+      return;
+    }
+    el.innerHTML = '';
+    const lastIdx = history.lastIndex();
+ 
+    history.pairs.forEach((entry, i) => {
+      const row  = document.createElement('div');
+      row.className = 'move-list__row';
+ 
+      const num  = document.createElement('span');
+      num.className = 'move-list__number'; num.textContent = `${entry.num}.`;
+ 
+      const w    = document.createElement('span');
+      w.className = 'move-list__move' + (i*2===lastIdx ? ' move-list__move--last' : '');
+      w.textContent = entry.w || '';
+ 
+      const b    = document.createElement('span');
+      b.className = 'move-list__move' + (i*2+1===lastIdx ? ' move-list__move--last' : '');
+      b.textContent = entry.b || '';
+ 
+      row.append(num, w, b); el.appendChild(row);
+    });
+ 
+    // Незакрытый ход белых в конце
+    if (history._pendingW) {
+      const row  = document.createElement('div');
+      row.className = 'move-list__row';
+      const num  = document.createElement('span');
+      num.className = 'move-list__number'; num.textContent = `${history._moveNum}.`;
+      const w    = document.createElement('span');
+      w.className = 'move-list__move move-list__move--last';
+      w.textContent = history._pendingW;
+      row.append(num, w); el.appendChild(row);
+    }
+ 
+    el.scrollTop = el.scrollHeight;
+  }
+ 
+  renderCaptures(whiteCap, blackCap) {
+    const sort = arr => [...arr].sort((a,b) => PIECE_VALUES[b.type]-PIECE_VALUES[a.type]);
+    document.getElementById('captures-white').innerHTML =
+      sort(whiteCap).map(p=>`<span>${p.getSymbol()}</span>`).join('');
+    document.getElementById('captures-black').innerHTML =
+      sort(blackCap).map(p=>`<span>${p.getSymbol()}</span>`).join('');
+  }
+ 
+  renderStatus(msg, mod='') {
+    const el = document.getElementById('status-message');
+    el.textContent = msg;
+    el.className = 'game-status__message' + (mod ? ` game-status__message--${mod}` : '');
+  }
+ 
+  renderActiveSide(turn) {
+    document.getElementById('player-info-white')
+      .classList.toggle('player-info--active', turn===COLORS.WHITE);
+    document.getElementById('player-info-black')
+      .classList.toggle('player-info--active', turn===COLORS.BLACK);
+  }
+ 
+  showPromotion(color, cb) {
+    const modal = document.getElementById('promotion-modal');
+    const box   = document.getElementById('promotion-pieces');
+    box.innerHTML = '';
+    for (const t of ['queen','rook','bishop','knight']) {
+      const btn = document.createElement('button');
+      btn.className = 'promotion-modal__btn';
+      btn.textContent = SYMBOLS[color][t];
+      btn.onclick = () => { modal.classList.remove('promotion-modal--visible'); cb(t); };
+      box.appendChild(btn);
+    }
+    modal.classList.add('promotion-modal--visible');
+  }
+ 
+  showGameOver(icon, title, sub) {
+    document.getElementById('go-icon').textContent   = icon;
+    document.getElementById('go-title').textContent  = title;
+    document.getElementById('go-sub') && (document.getElementById('go-subtitle').textContent = sub);
+    document.getElementById('go-subtitle').textContent = sub;
+    document.getElementById('game-over-modal').classList.add('game-over-modal--visible');
+  }
+ 
+  hideGameOver() {
+    document.getElementById('game-over-modal').classList.remove('game-over-modal--visible');
+  }
+ 
+  flip() { this.flipped = !this.flipped; }
+}
+ 
+/* ═══════════════════════════════════════════════════════════════════
+   SOLID S: Timer — только управление таймерами двух игроков.
+   ═══════════════════════════════════════════════════════════════════ */
+class Timer {
+  constructor(seconds = 600) {
+    this._times    = { white: seconds, black: seconds };
+    this._active   = null;
+    this._iv       = null;
+    this.onTimeout = null;
+    this._init     = seconds;
+  }
+ 
+  start(color) {
+    this.stop();
+    this._active = color;
+    this._iv = setInterval(() => {
+      this._times[this._active]--;
+      this._render();
+      if (this._times[this._active] <= 0) {
+        this.stop();
+        this.onTimeout?.(this._active);
+      }
+    }, 1000);
+  }
+ 
+  stop() { clearInterval(this._iv); this._iv=null; this._active=null; }
+ 
+  reset() {
+    this.stop();
+    this._times = { white: this._init, black: this._init };
+    this._render();
+  }
+ 
+  _render() {
+    for (const color of [COLORS.WHITE, COLORS.BLACK]) {
+      const el = document.getElementById(`timer-${color}`);
+      if (!el) continue;
+      const t = Math.max(0, this._times[color]);
+      el.textContent = `${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
+      el.classList.toggle('player-info__timer--danger', t <= 30);
+    }
+  }
+}
+ 
+/* ═══════════════════════════════════════════════════════════════════
+   SOLID D: Game — Dependency Inversion.
+   Game зависит от абстракций (Board, MoveValidator и пр.),
+   не создаёт их жёстко, а принимает или инстанцирует через конструкторы.
+   Это позволяет подменять реализации без изменения Game.
+   ═══════════════════════════════════════════════════════════════════ */
+class Game {
+  constructor() {
+    // SOLID D: Зависимости инжектируются через new, легко заменить
+    this.board    = new Board();
+    this.history  = new MoveHistory();
+    this.renderer = new GameRenderer(document.getElementById('chess-board'));
+    this.timer    = new Timer(600);
+ 
+    this.turn     = COLORS.WHITE;
+    this.selected = null;   // [r, c]
+    this.legal    = [];     // легальные ходы выбранной фигуры
+    this.lastMove = null;   // {fr, fc, tr, tc}
+    this.over     = false;
+ 
+    this.whiteCap = [];     // фигуры, захваченные белыми
+    this.blackCap = [];     // фигуры, захваченные чёрными
+ 
+    this.timer.onTimeout = color => {
+      this.over = true;
+      const winner = color === COLORS.WHITE ? 'Чёрные' : 'Белые';
+      this.renderer.showGameOver('⏱', 'Время вышло!', `Победили ${winner}`);
+    };
+ 
+    this._bindEvents();
+    this._render();
+    this.timer.start(COLORS.WHITE);
+  }
+ 
+  // Инкапсуляция: привязка DOM-событий
+  _bindEvents() {
+    document.getElementById('chess-board')
+      .addEventListener('click', e => {
+        if (this.over) return;
+        const sq = e.target.closest('.chess-board__square');
+        if (!sq) return;
+        this._onClick(+sq.dataset.row, +sq.dataset.col);
+      });
+ 
+    document.getElementById('btn-new-game')
+      .addEventListener('click', () => this.reset());
+    document.getElementById('btn-play-again')
+      .addEventListener('click', () => this.reset());
+    document.getElementById('btn-flip')
+      .addEventListener('click', () => { this.renderer.flip(); this._render(); });
+  }
+ 
+  // Обработка клика
+  _onClick(r, c) {
+    const piece = this.board.get(r, c);
+ 
+    if (this.selected) {
+      const [sr, sc] = this.selected;
+      const mv = this.legal.find(m => m[0]===r && m[1]===c);
+ 
+      if (mv) { this._move(sr, sc, r, c, mv[2]); return; }
+ 
+      if (piece && piece.color === this.turn) {
+        this.selected = [r, c];
+        this.legal    = MoveValidator.getLegal(this.board, r, c);
+        this._render(); return;
+      }
+      this.selected = null; this.legal = []; this._render(); return;
+    }
+ 
+    if (piece && piece.color === this.turn) {
+      this.selected = [r, c];
+      this.legal    = MoveValidator.getLegal(this.board, r, c);
+      this._render();
+    }
+  }
+ 
+  // Инициировать ход (с возможным превращением)
+  _move(fr, fc, tr, tc, special) {
+    const piece = this.board.get(fr, fc);
+    const isPromo = piece.type==='pawn' &&
+      ((piece.color===COLORS.WHITE && tr===0) || (piece.color===COLORS.BLACK && tr===7));
+ 
+    if (isPromo) {
+      this.renderer.showPromotion(piece.color, type => this._exec(fr,fc,tr,tc,special,type));
+    } else {
+      this._exec(fr, fc, tr, tc, special, null);
+    }
+  }
+ 
+  // Выполнить ход и обновить состояние
+  _exec(fr, fc, tr, tc, special, promoType) {
+    const piece    = this.board.get(fr, fc);
+    const captured = this.board.applyMove(fr, fc, tr, tc, special);
+ 
+    // Превращение пешки
+    if (promoType) {
+      const cls = {queen:Queen, rook:Rook, bishop:Bishop, knight:Knight}[promoType];
+      const np  = new cls(piece.color); np.hasMoved = true;
+      this.board.set(tr, tc, np);
+    }
+ 
+    if (captured) {
+      (piece.color === COLORS.WHITE ? this.whiteCap : this.blackCap).push(captured);
+    }
+ 
+    this.turn     = this.turn===COLORS.WHITE ? COLORS.BLACK : COLORS.WHITE;
+    this.lastMove = { fr, fc, tr, tc };
+    this.selected = null;
+    this.legal    = [];
+ 
+    const inCheck  = MoveValidator.isInCheck(this.board, this.turn);
+    const hasMove  = MoveValidator.hasAnyMove(this.board, this.turn);
+    const isMate   = inCheck  && !hasMove;
+    const isStale  = !inCheck && !hasMove;
+ 
+    // Записать ход (нотация) с учётом шаха/мата
+    this.history.record(
+      promoType ? this.board.get(tr,tc) : piece,
+      fr, fc, tr, tc, captured, special, inCheck, isMate
+    );
+ 
+    this._render();
+ 
+    if (isMate) {
+      this.history.finalize(); this.over = true; this.timer.stop();
+      const winner = this.turn===COLORS.WHITE ? 'Чёрные' : 'Белые';
+      setTimeout(() => this.renderer.showGameOver('♔', 'Шах и мат!', `Победили ${winner}`), 350);
+    } else if (isStale) {
+      this.history.finalize(); this.over = true; this.timer.stop();
+      setTimeout(() => this.renderer.showGameOver('🤝', 'Пат!', 'Ничья — нет доступных ходов'), 350);
+    } else {
+      this.timer.start(this.turn);
+    }
+  }
+ 
+  // Полная перерисовка интерфейса
+  _render() {
+    const inCheck = !this.over && MoveValidator.isInCheck(this.board, this.turn);
+ 
+    this.renderer.renderBoard(
+      this.board, this.selected, this.legal, this.lastMove,
+      inCheck ? this.turn : null
+    );
+    this.renderer.renderHistory(this.history);
+    this.renderer.renderCaptures(this.whiteCap, this.blackCap);
+    this.renderer.renderActiveSide(this.turn);
+ 
+    if (!this.over) {
+      const name = this.turn===COLORS.WHITE ? 'Белые' : 'Чёрные';
+      this.renderer.renderStatus(
+        inCheck ? `${name} — ШАХ!` : `Ход: ${name}`,
+        inCheck ? 'check' : ''
+      );
+    }
+  }
+ 
+  // Начать новую игру
+  reset() {
+    this.board    = new Board();
+    this.history  = new MoveHistory();
+    this.turn     = COLORS.WHITE;
+    this.selected = null;
+    this.legal    = [];
+    this.lastMove = null;
+    this.over     = false;
+    this.whiteCap = [];
+    this.blackCap = [];
+    this.timer.reset();
+    this.renderer.hideGameOver();
+    this._render();
+    this.timer.start(COLORS.WHITE);
+  }
+}
+ 
+/* ─── Точка входа ─── */
+document.addEventListener('DOMContentLoaded', () => { new Game(); });
+</script>
+</body>
+</html>
